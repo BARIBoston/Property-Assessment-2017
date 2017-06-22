@@ -1,38 +1,37 @@
-###Inputs
-paPath = "/Users/henrygomory/Downloads/property-assessment-fy2017.csv" # from boston open data
-propertiesPath = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Geographical Infrastructure 2017/Properties.2017.csv"
+# INPUT PATHS
+PA17path =      "/Users/henrygomory/Downloads/property-assessment-fy2017.csv"
+properties2017Path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Geographical Infrastructure 2017/Properties.2017.csv"
+blockGroupsShpPath = "Documents/Research/BARI/Geographic Infrastructure/Geographical Infrastructure 2015/Block Groups 2015/"
+blockGroupsShpName = "Census Block Groups"
+tractsShpPath = "Documents/Research/BARI/Geographic Infrastructure/Geographical Infrastructure 2015/Tracts/"
+tractsShpName = "Tracts_Boston_2010_BARI"
 
+
+# OUTPUT PATHS
 PA17_final_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/PADCross.Record.2017.csv"
 
-ct_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/PADCross.CT.2017.csv"
-ctshp_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/Tract Shp/"
-ctshp_name = "PADCross.CT.2017"
+pa_ct_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/PADCross.CT.2017.csv"
+pa_ctshp_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/Tract Shp/"
+pa_ctshp_name = "PADCross.CT.2017"
 
-bg_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/PADCross.CBG.2017.csv"
-bgshp_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/BG Shp/"
-bgshp_name = "PADCross.CBG.2017"
+pa_bg_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/PADCross.CBG.2017.csv"
+pa_bgshp_path = "/Users/henrygomory/Documents/Research/BARI/Git/New-BARI/Property Assessment 2017/BG Shp/"
+pa_bgshp_name = "PADCross.CBG.2017"
 
-### Get Data
-PA17_b = read.csv(paPath,stringsAsFactors=F)
-tractsShp_b = getTractsShp()
-bgsShp_b = getBGsShp()
-properties_b = read.csv(propertiesPath,stringsAsFactors=F)
-
-# in order to not reload every time
-PA17 = PA17_b
-tractsShp = tractsShp_b
-bgsShp = bgsShp_b
-properties = properties_b
+### Read in data
+PA17 = read.csv(PA17path,stringsAsFactors=F)
+bgsShp = readOGR(blockGroupsShpPath,blockGroupsShpName)
+tractsShp = readOGR(tractsShpPath,tractsShpName)
+properties2017 = read.csv(properties2017Path,stringsAsFactors=F)
 
 # fix IDs
 PA17 = standardizeGeoNames(PA17)
 
 #add on geo data from GI
-geo_vars = c("X","Y","Land_Parcel_ID","TLID","Blk_ID_10","BG_ID_10","CT_ID_10","NSA_NAME","BRA_PD")
-PA17 = merge(PA17, properties[,c("parcel_num",geo_vars)], by= "parcel_num",all.x=T)
+PA17 = merge(PA17, properties2017[,c("parcel_num",c("X","Y","Land_Parcel_ID","TLID","Blk_ID_10","BG_ID_10","CT_ID_10","NSA_NAME","BRA_PD"))], by= "parcel_num",all.x=T)
 
 #-------------------------------------------#
-#       Add in new vars                     #
+#       Create new vars                     #
 #-------------------------------------------#
 PA = PA17
 
@@ -125,7 +124,6 @@ varnames = c("parcel_num","CM_ID","GIS_ID" , "ST_NUM","ST_NAME","ST_NAME_SUF","U
 
 
 setdiff(names(PA),varnames)
-
 PA = PA[,varnames]
 
 write.csv(PA,PA17_final_path,row.names=F)
@@ -168,7 +166,7 @@ PA$DEC_BUILT_REMOD.nonres[age_nonres] = PA$DEC_BUILT_REMOD[age_nonres]
 
 
 
-
+# aggregate by census tract
 PA.agg.CT.mean = aggregate(cbind(EE_SCORE.res, AV_LAND_PER_SF.res,AV_LAND_PER_SF.nonres,AV_BLDG_PER_SF.res,AV_BLDG_PER_SF.nonres,
                                  YR_BUILT_REMOD.res,YR_BUILT_REMOD.nonres)~CT_ID_10,
                            data=PA,FUN=mean,na.action=na.pass, na.rm=T)
@@ -178,17 +176,18 @@ PA.agg.CT.mode = aggregate(cbind(DEC_BUILT_REMOD.res,DEC_BUILT_REMOD.nonres)~CT_
 
 PA.agg.CT = merge(PA.agg.CT.mean,PA.agg.CT.mode,by="CT_ID_10",all=T)
 
+# write census tract aggregation
 write.csv( PA.agg.CT,ct_path,row.names=F)
 
-
-
-
+# rename the tract aggregates so the names are short enough for the shape file
 PA.agg.CT.rename = rename(PA.agg.CT,EESR = EE_SCORE.res, ALPSFR = AV_LAND_PER_SF.res, ALPSFN = AV_LAND_PER_SF.nonres,
                           ABPSFR = AV_BLDG_PER_SF.res, ABPSFN = AV_BLDG_PER_SF.nonres, YBRR = YR_BUILT_REMOD.res, YBRN = YR_BUILT_REMOD.nonres, DBRR = DEC_BUILT_REMOD.res, DBRN = DEC_BUILT_REMOD.nonres)
 
+# merge to tract shapefile 
 PA.agg.CT.shp = merge(tractsShp, PA.agg.CT.rename, by="CT_ID_10",all.x=T)
 writeOGR(PA.agg.CT.shp,ctshp_path,ctshp_name,driver="ESRI Shapefile",overwrite_layer=TRUE)
 
+# aggregate be census block group
 PA.agg.CBG.mean = aggregate(cbind(EE_SCORE.res, AV_LAND_PER_SF.res,AV_LAND_PER_SF.nonres,AV_BLDG_PER_SF.res,AV_BLDG_PER_SF.nonres,
                                   YR_BUILT_REMOD.res,YR_BUILT_REMOD.nonres)~BG_ID_10,
                             data=PA,FUN=mean,na.action=na.pass, na.rm=T)
@@ -198,13 +197,16 @@ PA.agg.CBG.mode = aggregate(cbind(DEC_BUILT_REMOD.res,DEC_BUILT_REMOD.nonres)~BG
 
 PA.agg.CBG = merge(PA.agg.CBG.mean,PA.agg.CBG.mode,by="BG_ID_10",all=T)
 
-
+# write cbg file
 write.csv( PA.agg.CBG,bg_path,row.names=F)
 
+# rename so that variable names are not cut off in shape file
 PA.agg.CBG.rename = rename(PA.agg.CBG,EESR = EE_SCORE.res, ALPSFR = AV_LAND_PER_SF.res, ALPSFN = AV_LAND_PER_SF.nonres,
                            ABPSFR = AV_BLDG_PER_SF.res, ABPSFN = AV_BLDG_PER_SF.nonres, YBRR = YR_BUILT_REMOD.res, 
                            YBRN = YR_BUILT_REMOD.nonres, DBRR = DEC_BUILT_REMOD.res, DBRN = DEC_BUILT_REMOD.nonres)
 
 PA.agg.CBG.shp = merge(bgsShp, PA.agg.CBG.rename, by="BG_ID_10",all.x=T)
+
+# write cbg shapefile
 writeOGR(PA.agg.CBG.shp,bgshp_path,bgshp_name,driver="ESRI Shapefile",overwrite_layer=TRUE)
 
